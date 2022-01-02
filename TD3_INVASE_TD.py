@@ -1,0 +1,364 @@
+import copy
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from IPython import embed
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+torch.cuda.set_device(0)
+# Implementation of Twin Delayed Deep Deterministic Policy Gradients (TD3)
+# Paper: https://arxiv.org/abs/1802.09477
+
+
+class Actor(nn.Module):
+    def __init__(self, state_dim, action_dim, max_action):
+        super(Actor, self).__init__()
+
+        self.l1 = nn.Linear(state_dim, 256)
+        self.l2 = nn.Linear(256, 256)
+        self.l3 = nn.Linear(256, action_dim)
+
+        self.max_action = max_action
+
+
+    def forward(self, state):
+        a = F.relu(self.l1(state))
+        a = F.relu(self.l2(a))
+        return self.max_action * torch.tanh(self.l3(a))
+
+
+class Baseline(nn.Module):
+    def __init__(self, state_dim, action_dim):
+        super(Baseline, self).__init__()
+
+        # Q1 architecture
+        self.l1 = nn.Linear(state_dim + action_dim, 256)
+        self.l2 = nn.Linear(256, 256)
+        self.l3 = nn.Linear(256, 1)
+
+        # Q2 architecture
+        self.l4 = nn.Linear(state_dim + action_dim, 256)
+        self.l5 = nn.Linear(256, 256)
+        self.l6 = nn.Linear(256, 1)
+
+
+    def forward(self, state, action):
+        sa = torch.cat([state, action], 1)
+
+        q1 = F.relu(self.l1(sa))
+        q1 = F.relu(self.l2(q1))
+        q1 = self.l3(q1)
+
+        q2 = F.relu(self.l4(sa))
+        q2 = F.relu(self.l5(q2))
+        q2 = self.l6(q2)
+        return q1, q2
+
+
+    def Q1(self, state, action, mask):
+        sa = torch.cat([state, action], 1)
+
+        q1 = F.relu(self.l1(sa))
+        q1 = F.relu(self.l2(q1))
+        q1 = self.l3(q1)
+        return q1
+    
+    
+class Critic(nn.Module):
+    def __init__(self, state_dim, action_dim):
+        super(Critic, self).__init__()
+
+        # Q1 architecture
+        self.l1 = nn.Linear(state_dim + action_dim, 256)
+        self.l2 = nn.Linear(256, 256)
+        self.l3 = nn.Linear(256, 1)
+
+        # Q2 architecture
+        self.l4 = nn.Linear(state_dim + action_dim, 256)
+        self.l5 = nn.Linear(256, 256)
+        self.l6 = nn.Linear(256, 1)
+
+
+    def forward(self, state, action, mask):
+        sa = torch.cat([state,  mask* action], 1)
+
+        q1 = F.relu(self.l1(sa))
+        q1 = F.relu(self.l2(q1))
+        q1 = self.l3(q1)
+
+        q2 = F.relu(self.l4(sa))
+        q2 = F.relu(self.l5(q2))
+        q2 = self.l6(q2)
+        return q1, q2
+
+
+    def Q1(self, state, action, mask):
+        sa = torch.cat([state,  mask* action], 1)
+
+        q1 = F.relu(self.l1(sa))
+        q1 = F.relu(self.l2(q1))
+        q1 = self.l3(q1)
+        return q1
+    
+    
+    
+# Generator (Actor) in PyTorch
+'''
+Mask Generator
+'''
+class INVASE_Actor(nn.Module):
+    def __init__(self, state_dim, action_dim):
+        super(INVASE_Actor, self).__init__()
+
+        self.l1 = nn.Linear(state_dim + action_dim, 100)
+        self.l2 = nn.Linear(100, 100)
+        self.l3 = nn.Linear(100, action_dim)
+
+
+    def forward(self, state, action):
+        sa = torch.cat([state, action], 1)
+        
+        a = F.selu(self.l1(sa))
+        a = F.selu(self.l2(a))
+        return torch.sigmoid(self.l3(a))
+        
+    
+
+class TD3(object):
+    def __init__(
+        self,
+        state_dim,
+        action_dim,
+        max_action,
+        discount=0.99,
+        tau=0.005,
+        policy_noise=0.2,
+        noise_clip=0.5,
+        policy_freq=2
+    ):
+        self.device = device
+        self.actor = Actor(state_dim, action_dim, max_action).to(device)
+        self.actor_target = copy.deepcopy(self.actor)
+        self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=3e-4)
+
+        self.critic = Critic(state_dim, action_dim).to(device)
+        self.critic_target = copy.deepcopy(self.critic)
+        self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=3e-4)
+        
+        self.baseline = Baseline(state_dim, action_dim).to(device)
+        self.baseline_target = copy.deepcopy(self.baseline)
+        self.baseline_optimizer = torch.optim.Adam(self.baseline.parameters(), lr=3e-4)
+
+        self.invase_actor = INVASE_Actor(state_dim, action_dim).to(device)
+        self.invase_optimizer = torch.optim.Adam(self.invase_actor.parameters(), lr=3e-4)
+        
+        self.max_action = max_action
+        self.discount = discount
+        self.tau = tau
+        self.policy_noise = policy_noise
+        self.noise_clip = noise_clip
+        self.policy_freq = policy_freq
+
+        self.total_it = 0
+        
+    def Sample_M(self, gen_prob):
+        # Shape of the selection probability
+        n = gen_prob.shape[0]
+        d = gen_prob.shape[1]
+        # Sampling
+        samples = np.random.binomial(1, gen_prob, (n,d))
+
+        return samples
+    
+    def my_loss(self, y_true, y_pred,lmd, Thr):
+        # dimension of the features
+        
+        '''
+        sel_prob: the mask generated by bernulli sampler [bs, d]
+        dis_prob: prediction of the critic               [bs, state_dim]
+        val_prob: prediction of the baseline model       [bs, state_dim]
+        y_batch: batch of y_train                        [bs, state_dim]
+        '''
+
+        d = y_pred.shape[1]        
+        
+        # Put all three in y_true 
+        # 1. selected probability
+        sel_prob = y_true[:,:d] # bs x d
+        # 2. discriminator output
+        dis_prob = y_true[:,d:(d+1)] # bs x y shape
+        # 3. valfunction output
+        val_prob = y_true[:,(d+1):(d+2)] # bs x y shape
+        # 4. ground truth
+        y_final_c = y_true[:,(d+2):(d+3)] # bs x y shape
+        y_final_b = y_true[:,(d+3):] # bs x y shape
+        
+        # A1. Compute the rewards of the actor network
+        #embed()
+        Reward1 = torch.norm(y_final_c - dis_prob, p=2, dim=1)  
+
+        # A2. Compute the rewards of the actor network
+        Reward2 = torch.norm(y_final_b - val_prob, p=2, dim=1)  
+
+        # Difference is the rewards
+        Reward = Reward2 -  Reward1
+
+        # B. Policy gradient loss computation. 
+        #embed()
+        loss1 = Reward * torch.sum(sel_prob * torch.log(y_pred + 1e-8) + (1-sel_prob) * torch.log(1-y_pred + 1e-8), axis = 1) - lmd *torch.mean( torch.abs(y_pred-Thr), axis = 1)
+        
+        # C. Maximize the loss1
+        loss = torch.mean(-loss1)
+        #embed()
+        return loss
+    
+    def select_action(self, state):
+        state = torch.FloatTensor(state.reshape(1, -1)).to(device)
+        return self.actor(state).cpu().data.numpy().flatten()
+
+
+    def train(self, replay_buffer, batch_size=100, lmda = 0.0, thr = 0.0): # lmd, thr: parameters for generator training
+        self.total_it += 1
+        
+        # Sample replay buffer 
+        state, action, next_state, reward, not_done = replay_buffer.sample(batch_size)
+        
+        # training with PVS network (generator)
+        '''
+        the INVASE_PVS network is loaded.
+        the training of Q network and Policy network can be benefited from variable selection
+
+        INVASE_PVS.generator()
+
+        gen_prob = PVS_Alg.generator(torch.as_tensor(input_batch_xs).float(),torch.as_tensor(input_batch_xa).float())
+        sel_prob = 1.*(gen_prob > 0.5)
+
+
+        '''
+        with torch.no_grad():
+            # Select action according to policy and add clipped noise
+            noise = (
+                torch.randn_like(action) * self.policy_noise
+            ).clamp(-self.noise_clip, self.noise_clip)
+
+            next_action = (
+                self.actor_target(next_state) + noise
+            ).clamp(-self.max_action, self.max_action)
+
+            # Compute the target Q value
+            
+            sel_prob_next_action = self.invase_actor(next_state,next_action)
+            sel_prob_next_action = 1.*(sel_prob_next_action > 0.5)
+            '''deterministic version of G is applied here  # not sure if stochastic version can be better? '''
+            
+            '''G dot next_action'''
+            target_Q1, target_Q2 = self.critic_target(next_state, next_action, sel_prob_next_action)
+            target_Q = torch.min(target_Q1, target_Q2)
+            target_Q = reward + not_done * self.discount * target_Q
+            
+            target_Q1_B, target_Q2_B = self.baseline_target(next_state, next_action)
+            target_Q_B = torch.min(target_Q1_B, target_Q2_B)
+            target_Q_B = reward + not_done * self.discount * target_Q_B
+            
+            
+            
+        # y_i = target_Q, the regression target in the paper
+        # 
+        
+        # Get current Q estimates
+
+        gen_prob = self.invase_actor(state, action).cpu().detach().numpy()
+        sel_prob_action = torch.as_tensor(self.Sample_M(gen_prob)).to(self.device) # use a stochastic mask generation in this step to ensure exploration
+        '''Update Critic with G dot action'''
+        current_Q1, current_Q2 = self.critic(state, action, sel_prob_action)
+
+        # Compute critic loss
+        critic_loss = F.mse_loss(current_Q1, target_Q) + F.mse_loss(current_Q2, target_Q)
+
+        # Optimize the critic
+        self.critic_optimizer.zero_grad()
+        critic_loss.backward()
+        self.critic_optimizer.step()
+        '''Update Baseline'''
+        current_Q1_B, current_Q2_B = self.baseline(state, action)
+
+        # Compute critic loss
+        baseline_loss = F.mse_loss(current_Q1_B, target_Q_B) + F.mse_loss(current_Q2_B, target_Q_B)
+
+        # Optimize the critic
+        self.baseline_optimizer.zero_grad()
+        baseline_loss.backward()
+        self.baseline_optimizer.step()
+
+        
+        '''Update INVASE-Actor network (mask generator)'''
+        #embed()
+        y_batch_final = torch.cat((sel_prob_action.float(), current_Q1.detach(), current_Q1_B.detach(), target_Q, target_Q_B), axis = 1 )
+        # Train the generator
+        # g_loss = self.generator.train_on_batch(x_batch, y_batch_final)
+
+        invase_actor_pred = self.invase_actor(state, action)
+        self.invase_optimizer.zero_grad()
+        invase_actor_loss = self.my_loss(y_batch_final, invase_actor_pred, lmda, thr) # lmd, thr: parameters for generator training
+        invase_actor_loss.backward()
+        self.invase_optimizer.step()
+
+        # Delayed policy updates
+        if self.total_it % self.policy_freq == 0:
+
+            # Compute actor losse
+            action_pred_by_actor = self.actor(state) # on-policy prediction for actor loss backward
+            sel_prob_actor_action = self.invase_actor(state, action_pred_by_actor.detach())
+            sel_prob_actor_action = 1.*(sel_prob_actor_action > 0.5)
+
+            '''G dot actor's action '''
+
+            actor_loss = -self.critic.Q1(state, sel_prob_actor_action, action_pred_by_actor).mean()
+            
+            # Optimize the actor 
+            self.actor_optimizer.zero_grad()
+            actor_loss.backward()
+            self.actor_optimizer.step()
+
+            # Update the frozen target models
+            for param, target_param in zip(self.critic.parameters(), self.critic_target.parameters()):
+                target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
+
+            for param, target_param in zip(self.actor.parameters(), self.actor_target.parameters()):
+                target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
+            
+            for param, target_param in zip(self.baseline.parameters(), self.baseline_target.parameters()):
+                target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
+                
+    def save(self, filename):
+        torch.save(self.critic.state_dict(), filename + "_critic")
+        torch.save(self.critic_optimizer.state_dict(), filename + "_critic_optimizer")
+
+        torch.save(self.actor.state_dict(), filename + "_actor")
+        torch.save(self.actor_optimizer.state_dict(), filename + "_actor_optimizer")
+
+
+    def load(self, filename):
+        self.critic.load_state_dict(torch.load(filename + "_critic"))
+        self.critic_optimizer.load_state_dict(torch.load(filename + "_critic_optimizer"))
+        self.critic_target = copy.deepcopy(self.critic)
+
+        self.actor.load_state_dict(torch.load(filename + "_actor"))
+        self.actor_optimizer.load_state_dict(torch.load(filename + "_actor_optimizer"))
+        self.actor_target = copy.deepcopy(self.actor)
+    #%% Selected Features        
+    def output(self, xs_train, xa_train):
+        
+        gen_prob = self.invase_actor(xs_train, xa_train).cpu().detach().numpy()
+        
+        return np.asarray(gen_prob)
+     
+    #%% Prediction Results 
+    def get_prediction(self, xs, xa, m_train):
+        
+        val_prediction = self.baseline_target(xs,xa).cpu().detach().numpy()
+        
+        dis_prediction = self.critic_target(xs, xa, m_train).cpu().detach().numpy()
+        
+        return np.asarray(val_prediction), np.asarray(dis_prediction)

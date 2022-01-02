@@ -1,0 +1,62 @@
+invase: Syn1 2000 . Y
+input shape: 8
+Epoch:      0, d_loss (Acc)): 99.480, v_loss (Acc): 100.115, g_loss: +3.7745
+TPR mean: 60.4%  std: 33.8%
+FDR mean: 97.7%  std: 1.3%
+Epoch:      0, d_loss (Acc)): 85.190, v_loss (Acc): 85.562, g_loss: -1.7257
+TPR mean: 58.5%  std: 34.2%
+FDR mean: 97.7%  std: 1.3%
+Epoch:      0, d_loss (Acc)): 115.576, v_loss (Acc): 115.555, g_loss: +0.4979
+TPR mean: 57.2%  std: 34.0%
+FDR mean: 97.7%  std: 1.3%
+Epoch:      0, d_loss (Acc)): 67.872, v_loss (Acc): 67.482, g_loss: -1.1317
+TPR mean: 57.7%  std: 33.7%
+FDR mean: 97.7%  std: 1.3%
+Epoch:      0, d_loss (Acc)): 85.705, v_loss (Acc): 85.725, g_loss: -0.0032
+TPR mean: 57.8%  std: 33.5%
+FDR mean: 97.7%  std: 1.3%
+Epoch:      0, d_loss (Acc)): 97.137, v_loss (Acc): 96.168, g_loss: +1.2753
+TPR mean: 54.8%  std: 33.9%
+FDR mean: 97.8%  std: 1.4%
+Epoch:      0, d_loss (Acc)): 162.679, v_loss (Acc): 162.627, g_loss: +3.3493
+TPR mean: 54.9%  std: 34.1%
+FDR mean: 97.7%  std: 1.4%
+Epoch:      0, d_loss (Acc)): 90.479, v_loss (Acc): 89.766, g_loss: +3.2276
+TPR mean: 55.5%  std: 33.7%
+FDR mean: 97.7%  std: 1.4%
+Epoch:      0, d_loss (Acc)): 65.578, v_loss (Acc): 65.783, g_loss: +2.8438
+TPR mean: 53.7%  std: 33.5%
+FDR mean: 97.7%  std: 1.4%
+Epoch:      0, d_loss (Acc)): 136.317, v_loss (Acc): 136.481, g_loss: +4.4511
+TPR mean: 53.4%  std: 33.8%
+FDR mean: 97.7%  std: 1.5%
+Epoch:      0, d_loss (Acc)): 89.306, v_loss (Acc): 88.598, g_loss: +1.9150
+TPR mean: 53.3%  std: 33.2%
+FDR mean: 97.6%  std: 1.5%
+Epoch:      0, d_loss (Acc)): 118.964, v_loss (Acc): 117.975, g_loss: +1.7675
+TPR mean: 48.8%  std: 33.1%
+FDR mean: 97.8%  std: 1.5%
+Epoch:      0, d_loss (Acc)): 138.112, v_loss (Acc): 136.862, g_loss: +4.8937
+TPR mean: 47.6%  std: 32.1%
+FDR mean: 97.8%  std: 1.5%
+Epoch:      0, d_loss (Acc)): 42.766, v_loss (Acc): 42.571, g_loss: +3.2390
+TPR mean: 48.2%  std: 31.3%
+FDR mean: 97.7%  std: 1.5%
+Epoch:      0, d_loss (Acc)): 115.418, v_loss (Acc): 114.653, g_loss: +3.3348
+TPR mean: 45.0%  std: 31.4%
+FDR mean: 97.8%  std: 1.5%
+Epoch:      0, d_loss (Acc)): 95.372, v_loss (Acc): 95.026, g_loss: +2.6898
+TPR mean: 45.9%  std: 31.2%
+FDR mean: 97.6%  std: 1.6%
+Epoch:      0, d_loss (Acc)): 88.557, v_loss (Acc): 88.157, g_loss: +4.5404
+TPR mean: 43.7%  std: 29.7%
+FDR mean: 97.7%  std: 1.6%
+Epoch:      0, d_loss (Acc)): 57.650, v_loss (Acc): 57.345, g_loss: +2.9444
+TPR mean: 40.4%  std: 28.9%
+FDR mean: 97.7%  std: 1.6%
+Epoch:      0, d_loss (Acc)): 93.995, v_loss (Acc): 93.375, g_loss: +2.2421
+TPR mean: 43.3%  std: 27.7%
+FDR mean: 97.4%  std: 1.6%
+Epoch:      0, d_loss (Acc)): 93.108, v_loss (Acc): 92.664, g_loss: +5.8213
+TPR mean: 43.1%  std: 25.1%
+FDR mean: 97.3%  std: 1.6%
